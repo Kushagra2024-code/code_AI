@@ -1,0 +1,24 @@
+name: ai_oa_practice
+version: 1.0.0+1
+publish_to: "none"
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.5.1
+  http: ^1.2.2
+  cloud_firestore: ^5.4.4
+  firebase_auth: ^5.3.1
+  firebase_core: ^3.6.0
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
