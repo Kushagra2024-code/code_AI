@@ -208,6 +208,20 @@ export const submitCode = onRequest(async (req, res) => {
 
   const ref = await db.collection("submissions").add(doc);
 
+  const sessionRef = db.collection("sessions").doc(payload.sessionId);
+  await sessionRef.set(
+    {
+      sessionId: payload.sessionId,
+      userId,
+      type: "coding",
+      startTime: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      latestSubmissionScore: score,
+      latestRatingDelta: ratingDelta,
+    },
+    { merge: true }
+  );
+
   const userRef = db.collection("users").doc(userId);
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(userRef);
@@ -255,6 +269,29 @@ export const interviewTurn = onRequest(async (req, res) => {
     ],
   };
 
+  if (req.body.sessionId) {
+    await db.collection("interviewTurns").add({
+      sessionId: req.body.sessionId,
+      userId,
+      stage: req.body.stage,
+      context: req.body.context,
+      response,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    await db.collection("sessions").doc(req.body.sessionId).set(
+      {
+        sessionId: req.body.sessionId,
+        userId,
+        type: "coding",
+        startTime: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        latestInterviewStage: req.body.stage,
+      },
+      { merge: true }
+    );
+  }
+
   json(res, 200, response);
 });
 
@@ -292,6 +329,18 @@ export const evaluateDesign = onRequest(async (req, res) => {
     createdAt: FieldValue.serverTimestamp()
   });
 
+  await db.collection("sessions").doc(req.body.sessionId).set(
+    {
+      sessionId: req.body.sessionId,
+      userId,
+      type: "mixed",
+      startTime: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      latestDesignScore: Number(evalResult.score || 0),
+    },
+    { merge: true }
+  );
+
   json(res, 200, { designId: ref.id, evaluation: evalResult });
 });
 
@@ -315,6 +364,19 @@ export const detectCheating = onRequest(async (req, res) => {
     flagged,
     createdAt: FieldValue.serverTimestamp()
   });
+
+  await db.collection("sessions").doc(req.body.sessionId).set(
+    {
+      sessionId: req.body.sessionId,
+      userId,
+      type: "mixed",
+      startTime: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      latestSuspiciousScore: score,
+      latestFlagged: flagged,
+    },
+    { merge: true }
+  );
 
   json(res, 200, { flagId: ref.id, flagged, suspiciousScore: score });
 });

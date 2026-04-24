@@ -45,3 +45,11 @@
 - signals: map
 - suspiciousScore: number
 - flagged: boolean
+
+## interviewTurns/{turnId}
+- sessionId: string
+- userId: string
+- stage: string
+- context: string
+- response: map
+- createdAt: timestamp

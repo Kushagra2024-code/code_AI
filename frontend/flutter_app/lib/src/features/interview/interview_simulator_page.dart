@@ -25,6 +25,7 @@ class _InterviewSimulatorPageState extends ConsumerState<InterviewSimulatorPage>
     setState(() => loading = true);
     try {
       final api = ref.read(apiClientProvider);
+      final sessionId = ref.read(sessionIdProvider);
       final q = await api.post("generateQuestion", {
         "difficulty": "medium",
         "tags": ["arrays", "two-pointers"]
@@ -34,6 +35,7 @@ class _InterviewSimulatorPageState extends ConsumerState<InterviewSimulatorPage>
       final intro = await api.post("interviewTurn", {
         "stage": "intro",
         "context": "Problem: ${question["title"]}. ${question["statement"]}",
+        "sessionId": sessionId,
       });
 
       setState(() {
@@ -61,9 +63,11 @@ class _InterviewSimulatorPageState extends ConsumerState<InterviewSimulatorPage>
 
     try {
       final api = ref.read(apiClientProvider);
+      final sessionId = ref.read(sessionIdProvider);
       final turn = await api.post("interviewTurn", {
         "stage": "clarify",
         "context": text,
+        "sessionId": sessionId,
       });
       final followUps = (turn["followUps"] as List<dynamic>? ?? []).cast<dynamic>();
       setState(() {

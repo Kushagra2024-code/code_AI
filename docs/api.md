@@ -48,6 +48,7 @@ Input:
 Input:
 - stage: intro|clarify|optimize|edge_cases
 - context: string
+- sessionId?: string
 
 ## GET /sessionScore
 Query:

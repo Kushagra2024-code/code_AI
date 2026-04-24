@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 
 import "../analytics/analytics_dashboard_page.dart";
+import "../analytics/live_session_page.dart";
 import "../coding/coding_practice_page.dart";
 import "../interview/interview_simulator_page.dart";
 import "../system_design/system_design_page.dart";
@@ -20,6 +21,7 @@ class _AppShellState extends State<AppShell> {
     InterviewSimulatorPage(),
     SystemDesignPage(),
     AnalyticsDashboardPage(),
+    LiveSessionPage(),
   ];
 
   @override
@@ -35,6 +37,7 @@ class _AppShellState extends State<AppShell> {
           NavigationDestination(icon: Icon(Icons.record_voice_over), label: "Interview"),
           NavigationDestination(icon: Icon(Icons.draw), label: "Design"),
           NavigationDestination(icon: Icon(Icons.analytics), label: "Analytics"),
+          NavigationDestination(icon: Icon(Icons.bolt), label: "Live"),
         ],
       ),
     );
