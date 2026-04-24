@@ -11,6 +11,12 @@ Input:
 - difficulty: string
 - tags: string[]
 
+## POST /runCode
+Input:
+- code: string
+- language: cpp|python|java|javascript
+- stdin?: string
+
 ## POST /submitCode
 Input:
 - sessionId: string

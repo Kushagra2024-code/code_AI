@@ -120,6 +120,39 @@ export const generateQuestion = onRequest(async (req, res) => {
   json(res, 200, { questionId: ref.id, question });
 });
 
+export const runCode = onRequest(async (req, res) => {
+  if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
+  const userId = await guard(req, res);
+  if (!userId) return;
+
+  const missing = requireFields(req.body || {}, ["code", "language"]);
+  if (missing) return json(res, 400, { error: `Missing field: ${missing}` });
+
+  const payload = req.body;
+
+  if (judgeBaseUrl) {
+    try {
+      const result = await callJson(`${judgeBaseUrl}/run`, {
+        code: payload.code,
+        language: payload.language,
+        stdin: payload.stdin || "",
+      });
+      return json(res, 200, result);
+    } catch (_) {
+      // Fallback below if Judge service is unavailable.
+    }
+  }
+
+  return json(res, 200, {
+    stdout: "",
+    stderr: "Judge service unavailable. Configure JUDGE_SERVICE_URL to enable real execution.",
+    compileOutput: "",
+    time: null,
+    memory: null,
+    status: "Unavailable",
+  });
+});
+
 export const submitCode = onRequest(async (req, res) => {
   if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
   const userId = await guard(req, res);
