@@ -152,6 +152,11 @@ export const submitCode = onRequest(async (req, res) => {
   }
 
   const score = Math.round(correctness * 0.4 + performance * 0.2 + quality * 0.2);
+  const difficultyWeights = { easy: 0.8, medium: 1.0, hard: 1.3 };
+  const difficulty = String(payload.difficulty || "medium").toLowerCase();
+  const solveTimeSec = Number(payload.solveTimeSec || 1800);
+  const speedFactor = Math.max(0.6, Math.min(1.4, 1200 / Math.max(solveTimeSec, 120)));
+  const ratingDelta = Math.round((score - 50) * (difficultyWeights[difficulty] || 1.0) * speedFactor * 0.12);
 
   const doc = {
     sessionId: payload.sessionId,
@@ -168,7 +173,55 @@ export const submitCode = onRequest(async (req, res) => {
   };
 
   const ref = await db.collection("submissions").add(doc);
-  json(res, 200, { submissionId: ref.id, score });
+
+  const userRef = db.collection("users").doc(userId);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(userRef);
+    const currentRating = Number(snap.exists ? snap.data().rating || 1200 : 1200);
+    const nextRating = Math.max(800, currentRating + ratingDelta);
+    tx.set(
+      userRef,
+      {
+        rating: nextRating,
+        lastSubmissionAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  });
+
+  json(res, 200, { submissionId: ref.id, score, ratingDelta });
+});
+
+export const interviewTurn = onRequest(async (req, res) => {
+  if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
+  const userId = await guard(req, res);
+  if (!userId) return;
+
+  const missing = requireFields(req.body || {}, ["stage", "context"]);
+  if (missing) return json(res, 400, { error: `Missing field: ${missing}` });
+
+  let response;
+  if (genkitBaseUrl) {
+    try {
+      response = await callJson(`${genkitBaseUrl}/aiInterviewerFlow`, {
+        stage: req.body.stage,
+        context: req.body.context,
+      });
+    } catch (_) {
+      response = null;
+    }
+  }
+
+  response = response || {
+    message: "Walk me through your approach and justify your complexity trade-offs.",
+    followUps: [
+      "What edge cases can break this solution?",
+      "How would you optimize this for very large input?",
+    ],
+  };
+
+  json(res, 200, response);
 });
 
 export const evaluateDesign = onRequest(async (req, res) => {

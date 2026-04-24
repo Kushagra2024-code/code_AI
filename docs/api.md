@@ -38,6 +38,11 @@ Input:
 - language?: string
 - problem?: string
 
+## POST /interviewTurn
+Input:
+- stage: intro|clarify|optimize|edge_cases
+- context: string
+
 ## GET /sessionScore
 Query:
 - sessionId: string
