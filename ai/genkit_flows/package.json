@@ -1,0 +1,18 @@
+{
+  "name": "ai-oa-practice-genkit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "genkit:dev": "genkit start -- tsx src/index.ts"
+  },
+  "dependencies": {
+    "genkit": "^1.0.2",
+    "@genkit-ai/googleai": "^1.0.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}
