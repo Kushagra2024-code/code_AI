@@ -4,6 +4,7 @@ import "package:flutter_test/flutter_test.dart";
 void main() {
   testWidgets("App bootstraps", (tester) async {
     await tester.pumpWidget(const AiOaPracticeApp());
-    expect(find.text("AI OA Practice"), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.text("Sign in to continue"), findsOneWidget);
   });
 }

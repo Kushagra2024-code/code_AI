@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 
+import "../../core/auth_gateway.dart";
 import "../analytics/analytics_dashboard_page.dart";
 import "../analytics/live_session_page.dart";
 import "../coding/coding_practice_page.dart";
@@ -27,7 +28,16 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("AI OA Practice")),
+      appBar: AppBar(
+        title: const Text("AI OA Practice"),
+        actions: [
+          IconButton(
+            tooltip: "Sign out",
+            onPressed: () => AuthGateway.instance.signOut(),
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
       body: pages[index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,

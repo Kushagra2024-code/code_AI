@@ -1,6 +1,6 @@
 import "package:flutter/material.dart";
 
-import "features/shell/app_shell.dart";
+import "features/auth/auth_gate.dart";
 
 class AiOaPracticeApp extends StatelessWidget {
   const AiOaPracticeApp({super.key});
@@ -14,7 +14,7 @@ class AiOaPracticeApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF045D56)),
         useMaterial3: true,
       ),
-      home: const AppShell(),
+      home: const AuthGate(),
     );
   }
 }
