@@ -34,9 +34,9 @@ class AnalyticsDashboardPage extends ConsumerWidget {
             const SizedBox(height: 16),
             const Text("Trend (mock chart bars)", style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Row(
+            const Row(
               crossAxisAlignment: CrossAxisAlignment.end,
-              children: const [
+              children: [
                 _Bar(value: 40, label: "W1"),
                 _Bar(value: 50, label: "W2"),
                 _Bar(value: 65, label: "W3"),

@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend-and-services:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Cloud Functions install + syntax check
+        working-directory: backend/cloud_functions
+        run: |
+          npm ci
+          node --check src/index.js
+      - name: Genkit flows install + type check
+        working-directory: ai/genkit_flows
+        run: |
+          npm ci
+          npx tsc --noEmit
+      - name: Judge service install + syntax check
+        working-directory: compiler/judge_service
+        run: |
+          npm ci
+          node --check src/server.js
+
+  flutter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Flutter pub get
+        working-directory: frontend/flutter_app
+        run: flutter pub get
+      - name: Flutter analyze
+        working-directory: frontend/flutter_app
+        run: flutter analyze
+      - name: Flutter test
+        working-directory: frontend/flutter_app
+        run: flutter test

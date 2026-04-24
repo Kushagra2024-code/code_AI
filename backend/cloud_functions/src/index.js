@@ -1,5 +1,6 @@
 import { onRequest } from "firebase-functions/v2/https";
 import { initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
 initializeApp();
@@ -31,7 +32,18 @@ async function callJson(url, body) {
 async function checkAuth(req) {
   const auth = req.headers.authorization || "";
   if (!auth.startsWith("Bearer ")) return null;
-  return auth.slice(7);
+  const token = auth.slice(7);
+
+  if (process.env.FUNCTIONS_EMULATOR === "true" && token.startsWith("demo-")) {
+    return token;
+  }
+
+  try {
+    const decoded = await getAuth().verifyIdToken(token);
+    return decoded.uid;
+  } catch (_) {
+    return null;
+  }
 }
 
 async function rateLimit(userId) {
