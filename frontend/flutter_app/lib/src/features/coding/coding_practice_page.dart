@@ -22,9 +22,12 @@ class _CodingPracticePageState extends ConsumerState<CodingPracticePage> with Wi
   final stdinController = TextEditingController();
   String language = "python";
   String output = "Run code to see execution output";
+  String mentorOutput = "Submit code to get AI mentor feedback";
   int tabSwitches = 0;
   bool largePaste = false;
   bool loading = false;
+  bool mentorLoading = false;
+  String? lastSubmissionId;
   late final DateTime startedAt;
 
   @override
@@ -116,12 +119,54 @@ class _CodingPracticePageState extends ConsumerState<CodingPracticePage> with Wi
       });
 
       setState(() {
+        lastSubmissionId = resp["submissionId"]?.toString();
         output = "Submission accepted.\nscore: ${resp["score"]}\nrating delta: ${resp["ratingDelta"] ?? 0}\nsolve time: ${solveTimeSec}s";
       });
+
+      await fetchMentorFeedback();
     } catch (e) {
       setState(() => output = "Submit failed: $e");
     } finally {
       setState(() => loading = false);
+    }
+  }
+
+  Future<void> fetchMentorFeedback() async {
+    final submissionId = lastSubmissionId;
+    if (submissionId == null || submissionId.isEmpty) {
+      setState(() => mentorOutput = "No submission found yet. Submit code first.");
+      return;
+    }
+
+    final api = ref.read(apiClientProvider);
+    setState(() => mentorLoading = true);
+    try {
+      final resp = await api.post("generateFeedback", {
+        "submissionId": submissionId,
+        "code": codeController.text,
+        "language": language,
+        "problem": "Coding practice session",
+      });
+
+      final feedback = (resp["feedback"] as Map<String, dynamic>? ?? {});
+      final smells = ((feedback["smells"] as List<dynamic>?) ?? const []).join(", ");
+      final edgeCases = ((feedback["edgeCases"] as List<dynamic>?) ?? const []).join(", ");
+      final suggestions = ((feedback["suggestions"] as List<dynamic>?) ?? const []).join("\n- ");
+
+      setState(() {
+        mentorOutput = [
+          "Time Complexity: ${feedback["timeComplexity"] ?? "N/A"}",
+          "Optimal/Target: ${feedback["optimalComplexity"] ?? feedback["memoryComplexity"] ?? "N/A"}",
+          "Readability: ${feedback["readability"] ?? "N/A"}",
+          "Smells: ${smells.isEmpty ? "None" : smells}",
+          "Edge Cases: ${edgeCases.isEmpty ? "None" : edgeCases}",
+          "Suggestions:\n- ${suggestions.isEmpty ? "No suggestions" : suggestions}",
+        ].join("\n\n");
+      });
+    } catch (e) {
+      setState(() => mentorOutput = "Failed to generate feedback: $e");
+    } finally {
+      setState(() => mentorLoading = false);
     }
   }
 
@@ -155,6 +200,7 @@ class _CodingPracticePageState extends ConsumerState<CodingPracticePage> with Wi
               ),
               FilledButton(onPressed: loading ? null : runCode, child: const Text("Run")),
               OutlinedButton(onPressed: loading ? null : submitCode, child: const Text("Submit")),
+              OutlinedButton(onPressed: mentorLoading ? null : fetchMentorFeedback, child: const Text("AI Mentor")),
             ],
           ),
           const SizedBox(height: 8),
@@ -183,6 +229,31 @@ class _CodingPracticePageState extends ConsumerState<CodingPracticePage> with Wi
           ),
           const SizedBox(height: 8),
           Text(output),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text("AI Mentor", style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 8),
+                      if (mentorLoading)
+                        const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(mentorOutput),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
