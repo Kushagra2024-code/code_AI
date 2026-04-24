@@ -84,6 +84,96 @@ function requireFields(obj, fields) {
   return null;
 }
 
+async function refreshSessionLiveScore(sessionId) {
+  const sessionRef = db.collection("sessions").doc(sessionId);
+  const snap = await sessionRef.get();
+  const data = snap.exists ? snap.data() : {};
+
+  const liveFinalScore = computeSessionFinalScore({
+    codingCorrectness: Number(data?.latestCodingCorrectness || 0),
+    codingEfficiency: Number(data?.latestCodingEfficiency || 0),
+    codeQuality: Number(data?.latestCodeQuality || 0),
+    systemDesign: Number(data?.latestDesignScore || 0),
+  });
+
+  await sessionRef.set(
+    {
+      liveFinalScore,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+export const startSession = onRequest(async (req, res) => {
+  if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
+  const userId = await guard(req, res);
+  if (!userId) return;
+
+  const missing = requireFields(req.body || {}, ["sessionId", "type"]);
+  if (missing) return json(res, 400, { error: `Missing field: ${missing}` });
+
+  const sessionId = req.body.sessionId;
+  const type = String(req.body.type || "coding");
+  const sessionRef = db.collection("sessions").doc(sessionId);
+  const existing = await sessionRef.get();
+
+  await sessionRef.set(
+    {
+      sessionId,
+      userId,
+      type,
+      status: "active",
+      startTime: existing.exists ? existing.data()?.startTime || FieldValue.serverTimestamp() : FieldValue.serverTimestamp(),
+      endTime: null,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  json(res, 200, { sessionId, status: "active" });
+});
+
+export const endSession = onRequest(async (req, res) => {
+  if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
+  const userId = await guard(req, res);
+  if (!userId) return;
+
+  const missing = requireFields(req.body || {}, ["sessionId"]);
+  if (missing) return json(res, 400, { error: `Missing field: ${missing}` });
+
+  const sessionId = req.body.sessionId;
+  const subs = await db.collection("submissions").where("sessionId", "==", sessionId).get();
+  const designs = await db.collection("designSubmissions").where("sessionId", "==", sessionId).get();
+
+  const codingCorrectness = subs.empty ? 0 : Math.max(...subs.docs.map((d) => Number(d.data().correctness || 0)));
+  const codingEfficiency = subs.empty ? 0 : Math.max(...subs.docs.map((d) => Number(d.data().performance || 0)));
+  const codeQuality = subs.empty ? 0 : Math.max(...subs.docs.map((d) => Number(d.data().quality || 0)));
+  const systemDesign = designs.empty ? 0 : Math.max(...designs.docs.map((d) => Number(d.data().evaluation?.score || 0)));
+
+  const finalScore = computeSessionFinalScore({
+    codingCorrectness,
+    codingEfficiency,
+    codeQuality,
+    systemDesign,
+  });
+
+  await db.collection("sessions").doc(sessionId).set(
+    {
+      sessionId,
+      userId,
+      status: "completed",
+      endTime: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      finalScore,
+      liveFinalScore: finalScore,
+    },
+    { merge: true }
+  );
+
+  json(res, 200, { sessionId, status: "completed", finalScore });
+});
+
 export const generateQuestion = onRequest(async (req, res) => {
   if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
   const userId = await guard(req, res);
@@ -214,13 +304,19 @@ export const submitCode = onRequest(async (req, res) => {
       sessionId: payload.sessionId,
       userId,
       type: "coding",
+      status: "active",
       startTime: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       latestSubmissionScore: score,
       latestRatingDelta: ratingDelta,
+      latestCodingCorrectness: correctness,
+      latestCodingEfficiency: performance,
+      latestCodeQuality: quality,
     },
     { merge: true }
   );
+
+  await refreshSessionLiveScore(payload.sessionId);
 
   const userRef = db.collection("users").doc(userId);
   await db.runTransaction(async (tx) => {
@@ -284,6 +380,7 @@ export const interviewTurn = onRequest(async (req, res) => {
         sessionId: req.body.sessionId,
         userId,
         type: "coding",
+        status: "active",
         startTime: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
         latestInterviewStage: req.body.stage,
@@ -334,12 +431,15 @@ export const evaluateDesign = onRequest(async (req, res) => {
       sessionId: req.body.sessionId,
       userId,
       type: "mixed",
+      status: "active",
       startTime: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       latestDesignScore: Number(evalResult.score || 0),
     },
     { merge: true }
   );
+
+  await refreshSessionLiveScore(req.body.sessionId);
 
   json(res, 200, { designId: ref.id, evaluation: evalResult });
 });
@@ -370,6 +470,7 @@ export const detectCheating = onRequest(async (req, res) => {
       sessionId: req.body.sessionId,
       userId,
       type: "mixed",
+      status: "active",
       startTime: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       latestSuspiciousScore: score,

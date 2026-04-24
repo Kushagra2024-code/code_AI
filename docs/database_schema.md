@@ -8,9 +8,16 @@
 ## sessions/{sessionId}
 - userId: string
 - type: coding|system_design|mixed
+- status: active|completed
 - startTime: timestamp
 - endTime: timestamp
 - score: number
+- liveFinalScore: number
+- finalScore: number
+- latestCodingCorrectness: number
+- latestCodingEfficiency: number
+- latestCodeQuality: number
+- latestDesignScore: number
 
 ## questions/{questionId}
 - title: string

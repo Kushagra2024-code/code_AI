@@ -17,6 +17,15 @@ Input:
 - language: cpp|python|java|javascript
 - stdin?: string
 
+## POST /startSession
+Input:
+- sessionId: string
+- type: coding|system_design|mixed
+
+## POST /endSession
+Input:
+- sessionId: string
+
 ## POST /submitCode
 Input:
 - sessionId: string
