@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "source": "backend/cloud_functions"
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}

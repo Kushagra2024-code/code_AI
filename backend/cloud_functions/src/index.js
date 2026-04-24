@@ -4,8 +4,29 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
 initializeApp();
 const db = getFirestore();
+const genkitBaseUrl = process.env.GENKIT_BASE_URL || "";
+const judgeBaseUrl = process.env.JUDGE_SERVICE_URL || "";
 
 const json = (res, status, body) => res.status(status).json(body);
+
+async function callJson(url, body) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    return await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 async function checkAuth(req) {
   const auth = req.headers.authorization || "";
@@ -58,16 +79,28 @@ export const generateQuestion = onRequest(async (req, res) => {
   const missing = requireFields(req.body || {}, ["difficulty", "tags"]);
   if (missing) return json(res, 400, { error: `Missing field: ${missing}` });
 
+  let generated;
+  if (genkitBaseUrl) {
+    try {
+      generated = await callJson(`${genkitBaseUrl}/questionGenerationFlow`, {
+        difficulty: req.body.difficulty,
+        tags: req.body.tags,
+      });
+    } catch (_) {
+      generated = null;
+    }
+  }
+
   const question = {
-    title: "Two Sum Variant",
-    difficulty: req.body.difficulty,
-    tags: req.body.tags,
-    statement: "Given an array and target, return indices of two numbers that add to target.",
-    constraints: ["2 <= n <= 1e5", "-1e9 <= nums[i] <= 1e9"],
-    examples: [{ input: "nums=[2,7,11,15], target=9", output: "[0,1]" }],
-    hiddenTests: [{ input: "[3,3], 6", output: "[0,1]" }],
+    title: generated?.title || "Two Sum Variant",
+    difficulty: generated?.difficulty || req.body.difficulty,
+    tags: generated?.tags || req.body.tags,
+    statement: generated?.statement || "Given an array and target, return indices of two numbers that add to target.",
+    constraints: generated?.constraints || ["2 <= n <= 1e5", "-1e9 <= nums[i] <= 1e9"],
+    examples: generated?.examples || [{ input: "nums=[2,7,11,15], target=9", output: "[0,1]" }],
+    hiddenTests: generated?.hiddenTests || [{ input: "[3,3], 6", output: "[0,1]" }],
     createdBy: userId,
-    createdAt: FieldValue.serverTimestamp()
+    createdAt: FieldValue.serverTimestamp(),
   };
 
   const ref = await db.collection("questions").add(question);
@@ -79,13 +112,32 @@ export const submitCode = onRequest(async (req, res) => {
   const userId = await guard(req, res);
   if (!userId) return;
 
-  const missing = requireFields(req.body || {}, ["sessionId", "code", "language", "result"]);
+  const missing = requireFields(req.body || {}, ["sessionId", "code", "language"]);
   if (missing) return json(res, 400, { error: `Missing field: ${missing}` });
 
   const payload = req.body;
-  const correctness = Number(payload.result?.correctness || 0);
-  const performance = Number(payload.result?.performance || 0);
+  let correctness = Number(payload.result?.correctness || 0);
+  let performance = Number(payload.result?.performance || 0);
   const quality = Number(payload.result?.quality || 0);
+  let execution = payload.result?.execution || {};
+  let passedTests = payload.result?.passedTests || 0;
+
+  if (judgeBaseUrl && (payload.sampleTests || payload.hiddenTests)) {
+    try {
+      const judge = await callJson(`${judgeBaseUrl}/submit`, {
+        code: payload.code,
+        language: payload.language,
+        sampleTests: payload.sampleTests || [],
+        hiddenTests: payload.hiddenTests || [],
+      });
+      correctness = Number(judge.correctness || 0);
+      performance = Number(judge.performance || 0);
+      passedTests = Number(judge.passed || 0);
+      execution = { details: judge.details || [] };
+    } catch (_) {
+      // If Judge0 integration fails, keep fallback result payload.
+    }
+  }
 
   const score = Math.round(correctness * 0.4 + performance * 0.2 + quality * 0.2);
 
@@ -94,8 +146,11 @@ export const submitCode = onRequest(async (req, res) => {
     userId,
     code: payload.code,
     language: payload.language,
-    passedTests: payload.result?.passedTests || 0,
-    execution: payload.result?.execution || {},
+    correctness,
+    performance,
+    quality,
+    passedTests,
+    execution,
     score,
     createdAt: FieldValue.serverTimestamp()
   };
@@ -112,10 +167,22 @@ export const evaluateDesign = onRequest(async (req, res) => {
   const missing = requireFields(req.body || {}, ["sessionId", "diagram"]);
   if (missing) return json(res, 400, { error: `Missing field: ${missing}` });
 
-  const evalResult = {
+  let evalResult;
+  if (genkitBaseUrl) {
+    try {
+      evalResult = await callJson(`${genkitBaseUrl}/systemDesignEvaluationFlow`, {
+        question: req.body.question || "Design a scalable distributed system",
+        diagram: req.body.diagram,
+      });
+    } catch (_) {
+      evalResult = null;
+    }
+  }
+
+  evalResult = evalResult || {
     score: 78,
     missingComponents: ["cache invalidation strategy", "read replica failover"],
-    improvements: ["Add CDN for static media", "Use async queue for heavy writes"]
+    improvements: ["Add CDN for static media", "Use async queue for heavy writes"],
   };
 
   const ref = await db.collection("designSubmissions").add({
@@ -161,13 +228,27 @@ export const generateFeedback = onRequest(async (req, res) => {
   const missing = requireFields(req.body || {}, ["submissionId", "code"]);
   if (missing) return json(res, 400, { error: `Missing field: ${missing}` });
 
-  json(res, 200, {
-    feedback: {
-      timeComplexity: "O(n^2)",
-      optimalComplexity: "O(n log n)",
-      suggestions: ["Use sorting + binary search", "Handle empty input edge case"]
+  let feedback;
+  if (genkitBaseUrl) {
+    try {
+      feedback = await callJson(`${genkitBaseUrl}/codeFeedbackFlow`, {
+        code: req.body.code,
+        language: req.body.language || "unknown",
+        problem: req.body.problem || "General coding interview problem",
+      });
+    } catch (_) {
+      feedback = null;
     }
-  });
+  }
+
+  feedback = feedback || {
+    timeComplexity: "O(n^2)",
+    optimalComplexity: "O(n log n)",
+    memoryComplexity: "O(n)",
+    suggestions: ["Use sorting + binary search", "Handle empty input edge case"],
+  };
+
+  json(res, 200, { feedback });
 });
 
 export const sessionScore = onRequest(async (req, res) => {
@@ -181,11 +262,28 @@ export const sessionScore = onRequest(async (req, res) => {
   const subs = await db.collection("submissions").where("sessionId", "==", sessionId).get();
   const designs = await db.collection("designSubmissions").where("sessionId", "==", sessionId).get();
 
-  const codingScore = subs.empty ? 0 : Math.max(...subs.docs.map((d) => d.data().score || 0));
+  const codingCorrectness = subs.empty ? 0 : Math.max(...subs.docs.map((d) => Number(d.data().correctness || 0)));
+  const codingEfficiency = subs.empty ? 0 : Math.max(...subs.docs.map((d) => Number(d.data().performance || 0)));
+  const codeQuality = subs.empty ? 0 : Math.max(...subs.docs.map((d) => Number(d.data().quality || 0)));
   const designScore = designs.empty ? 0 : Math.max(...designs.docs.map((d) => d.data().evaluation?.score || 0));
 
-  const finalScore = Math.round(codingScore * 0.8 + designScore * 0.2);
-  json(res, 200, { sessionId, codingScore, designScore, finalScore });
+  const finalScore = Math.round(
+    codingCorrectness * 0.4 +
+      codingEfficiency * 0.2 +
+      codeQuality * 0.2 +
+      Number(designScore || 0) * 0.2
+  );
+
+  json(res, 200, {
+    sessionId,
+    components: {
+      codingCorrectness,
+      codingEfficiency,
+      codeQuality,
+      systemDesign: Number(designScore || 0),
+    },
+    finalScore,
+  });
 });
 
 export const analytics = onRequest(async (req, res) => {
