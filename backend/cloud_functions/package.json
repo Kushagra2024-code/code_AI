@@ -6,7 +6,8 @@
   "main": "src/index.js",
   "scripts": {
     "serve": "firebase emulators:start --only functions",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "node --test"
   },
   "dependencies": {
     "firebase-admin": "^12.5.0",

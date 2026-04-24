@@ -18,6 +18,7 @@ jobs:
         run: |
           npm ci
           node --check src/index.js
+          npm test
       - name: Genkit flows install + type check
         working-directory: ai/genkit_flows
         run: |

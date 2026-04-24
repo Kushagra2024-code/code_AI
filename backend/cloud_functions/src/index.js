@@ -2,6 +2,7 @@ import { onRequest } from "firebase-functions/v2/https";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { computeRatingDelta, computeSessionFinalScore, computeSubmissionScore } from "./scoring.js";
 
 initializeApp();
 const db = getFirestore();
@@ -151,12 +152,12 @@ export const submitCode = onRequest(async (req, res) => {
     }
   }
 
-  const score = Math.round(correctness * 0.4 + performance * 0.2 + quality * 0.2);
-  const difficultyWeights = { easy: 0.8, medium: 1.0, hard: 1.3 };
-  const difficulty = String(payload.difficulty || "medium").toLowerCase();
-  const solveTimeSec = Number(payload.solveTimeSec || 1800);
-  const speedFactor = Math.max(0.6, Math.min(1.4, 1200 / Math.max(solveTimeSec, 120)));
-  const ratingDelta = Math.round((score - 50) * (difficultyWeights[difficulty] || 1.0) * speedFactor * 0.12);
+  const score = computeSubmissionScore({ correctness, performance, quality });
+  const ratingDelta = computeRatingDelta({
+    score,
+    difficulty: payload.difficulty,
+    solveTimeSec: payload.solveTimeSec,
+  });
 
   const doc = {
     sessionId: payload.sessionId,
@@ -332,12 +333,12 @@ export const sessionScore = onRequest(async (req, res) => {
   const codeQuality = subs.empty ? 0 : Math.max(...subs.docs.map((d) => Number(d.data().quality || 0)));
   const designScore = designs.empty ? 0 : Math.max(...designs.docs.map((d) => d.data().evaluation?.score || 0));
 
-  const finalScore = Math.round(
-    codingCorrectness * 0.4 +
-      codingEfficiency * 0.2 +
-      codeQuality * 0.2 +
-      Number(designScore || 0) * 0.2
-  );
+  const finalScore = computeSessionFinalScore({
+    codingCorrectness,
+    codingEfficiency,
+    codeQuality,
+    systemDesign: Number(designScore || 0),
+  });
 
   json(res, 200, {
     sessionId,
